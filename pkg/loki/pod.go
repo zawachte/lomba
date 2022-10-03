@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 )
 
 const (
@@ -56,19 +57,26 @@ ruler:
 )
 
 func BringUpPod() error {
-	homeDir, err := os.UserHomeDir()
+
+	cmdString := "kill loki"
+	cmd := exec.Command("docker", strings.Split(cmdString, " ")...)
+	cmd.Run()
+
+	cmdString = "rm loki"
+	cmd = exec.Command("docker", strings.Split(cmdString, " ")...)
+	cmd.Run()
+
+	tempDir := os.TempDir()
+
+	dd := path.Join(tempDir, "loki-config.yaml")
+
+	err := ioutil.WriteFile(dd, []byte(staticConfig), 0777)
 	if err != nil {
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(homeDir, "loki-config.yaml"), []byte(staticConfig), 0644)
-	if err != nil {
-		return err
-	}
-
-	cmdString := fmt.Sprintf("docker run --name loki -d -v %s:/mnt/config -p 3100:3100 grafana/loki:2.6.0 -config.file=/mnt/config/loki-config.yaml", homeDir)
-
-	cmd := exec.Command(cmdString)
+	cmdString = fmt.Sprintf("run --name loki -d -v %s:/test/loki-config.yaml -p 3100:3100 grafana/loki:2.6.0 -config.file=/test/loki-config.yaml", dd)
+	cmd = exec.Command("docker", strings.Split(cmdString, " ")...)
 	err = cmd.Run()
 	if err != nil {
 		return err

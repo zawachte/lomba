@@ -10,7 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/zawachte/lomba/pkg/grafana"
 	"github.com/zawachte/lomba/pkg/loki"
+
 	"github.com/zawachte/lomba/pkg/parser"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,6 +55,11 @@ func (r *runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	err = grafana.BringUpPod()
+	if err != nil {
+		return err
+	}
+
 	namespaceList, err := r.cs.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -85,7 +92,12 @@ func (r *runner) Run(ctx context.Context) error {
 					return err
 				}
 
-				err = r.loadLogsToLoki(buf, parser.NewContainerParser())
+				labels := make(map[string]string)
+				labels["namespace"] = ns.Name
+				labels["pod_name"] = pod.Name
+				labels["container_name"] = container.Name
+
+				err = r.loadLogsToLoki(buf, parser.NewContainerParser(), labels)
 				if err != nil {
 					return err
 				}
@@ -96,14 +108,14 @@ func (r *runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *runner) loadLogsToLoki(rawLogs *bytes.Buffer, logParser parser.Parser) error {
+func (r *runner) loadLogsToLoki(rawLogs *bytes.Buffer, logParser parser.Parser, labels map[string]string) error {
 
 	scanner := bufio.NewScanner(rawLogs)
 	scanner.Split(bufio.ScanLines)
 
 	for scanner.Scan() {
 		log_line := scanner.Text()
-		tm, labels, err := logParser.Parse(log_line)
+		tm, labels, err := logParser.Parse(log_line, labels)
 		if err != nil {
 			r.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
 			continue

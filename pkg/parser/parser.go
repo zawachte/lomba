@@ -7,5 +7,5 @@ import (
 )
 
 type Parser interface {
-	Parse(string) (time.Time, model.LabelSet, error)
+	Parse(string, map[string]string) (time.Time, model.LabelSet, error)
 }

@@ -14,7 +14,7 @@ func NewContainerParser() Parser {
 	return &containerParser{}
 }
 
-func (cp *containerParser) Parse(input string) (time.Time, model.LabelSet, error) {
+func (cp *containerParser) Parse(input string, labels map[string]string) (time.Time, model.LabelSet, error) {
 	split_string := strings.Split(input, " ")
 	if len(split_string) < 1 {
 		return time.Time{}, nil, errors.New("nil log line")
@@ -29,8 +29,12 @@ func (cp *containerParser) Parse(input string) (time.Time, model.LabelSet, error
 		return time.Time{}, nil, err
 	}
 
-	labels := model.LabelSet{}
-	labels["log_type"] = "journal"
+	labelSet := model.LabelSet{}
+	labelSet["log_type"] = "container"
 
-	return tm, labels, nil
+	for k, v := range labels {
+		labelSet[model.LabelName(k)] = model.LabelValue(v)
+	}
+
+	return tm, labelSet, nil
 }
