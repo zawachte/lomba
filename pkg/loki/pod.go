@@ -38,6 +38,11 @@ schema_config:
         prefix: index_
         period: 24h
 
+limits_config:
+  enforce_metric_name: false
+  reject_old_samples: false
+  reject_old_samples_max_age: 43800h
+
 ruler:
   alertmanager_url: http://localhost:9093
 
@@ -56,15 +61,28 @@ ruler:
 `
 )
 
-func BringUpPod() error {
+func BringDownPod() error {
 
 	cmdString := "kill loki"
 	cmd := exec.Command("docker", strings.Split(cmdString, " ")...)
-	cmd.Run()
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
 
 	cmdString = "rm loki"
 	cmd = exec.Command("docker", strings.Split(cmdString, " ")...)
-	cmd.Run()
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func BringUpPod() error {
+
+	BringDownPod()
 
 	tempDir := os.TempDir()
 
@@ -75,8 +93,8 @@ func BringUpPod() error {
 		return err
 	}
 
-	cmdString = fmt.Sprintf("run --name loki -d -v %s:/test/loki-config.yaml -p 3100:3100 grafana/loki:2.6.0 -config.file=/test/loki-config.yaml", dd)
-	cmd = exec.Command("docker", strings.Split(cmdString, " ")...)
+	cmdString := fmt.Sprintf("run --name loki -d -v %s:/test/loki-config.yaml -p 3100:3100 grafana/loki:2.6.0 -config.file=/test/loki-config.yaml", dd)
+	cmd := exec.Command("docker", strings.Split(cmdString, " ")...)
 	err = cmd.Run()
 	if err != nil {
 		return err
