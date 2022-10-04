@@ -7,7 +7,7 @@ Analyze Kubernetes cluster logs in an instant. Powered by Grafana and Loki.
 Lomba does the following things:
 
 1. Spins up a local loki container and grafana container.
-2. Reads all of the pod logs from a kubernetes cluster and injests them into loki. 
+2. Reads all of the pod logs from a kubernetes cluster and ingests them into loki. 
 
 This empowers you to quickly analyze the current state of a cluster without making any modifications to the cluster state.
 
