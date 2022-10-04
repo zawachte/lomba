@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/zawachte/lomba/internal/runner"
+	"github.com/zawachte/lomba/pkg/grafana"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -51,7 +53,16 @@ func runRun() error {
 		return err
 	}
 
-	return rr.Run(context.Background())
+	err = rr.Run(context.Background())
+	if err != nil {
+		return err
+	}
+
+	grafanaEndpoint := grafana.GetOutboundIPOrLocalhost()
+
+	fmt.Printf("Kubernetes logs are injested to Loki. Ready to query at http://%s:3000\n", grafanaEndpoint)
+
+	return nil
 }
 
 // move to pkg
@@ -70,7 +81,7 @@ func createClientSet(kubeconfig string) (kubernetes.Interface, error) {
 	restConfig, err := clientcmd.NewDefaultClientConfig(*config, configOverrides).ClientConfig()
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid configuration:") {
-			return nil, errors.New(strings.Replace(err.Error(), "invalid configuration:", "invalid kubeconfig file; clusterctl requires a valid kubeconfig file to connect to the management cluster:", 1))
+			return nil, errors.New(strings.Replace(err.Error(), "invalid configuration:", "invalid kubeconfig file:", 1))
 		}
 		return nil, err
 	}

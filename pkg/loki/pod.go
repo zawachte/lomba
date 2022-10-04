@@ -86,14 +86,14 @@ func BringUpPod() error {
 
 	tempDir := os.TempDir()
 
-	dd := path.Join(tempDir, "loki-config.yaml")
+	configFilePath := path.Join(tempDir, "loki-config.yaml")
 
-	err := ioutil.WriteFile(dd, []byte(staticConfig), 0777)
+	err := ioutil.WriteFile(configFilePath, []byte(staticConfig), 0777)
 	if err != nil {
 		return err
 	}
 
-	cmdString := fmt.Sprintf("run --name loki -d -v %s:/test/loki-config.yaml -p 3100:3100 grafana/loki:2.6.0 -config.file=/test/loki-config.yaml", dd)
+	cmdString := fmt.Sprintf("run --name loki -d -v %s:/test/loki-config.yaml -p 3100:3100 grafana/loki:2.6.0 -config.file=/test/loki-config.yaml", configFilePath)
 	cmd := exec.Command("docker", strings.Split(cmdString, " ")...)
 	err = cmd.Run()
 	if err != nil {
