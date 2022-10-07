@@ -2,9 +2,8 @@ package runner
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"io"
+	"fmt"
 
 	"github.com/go-kit/log"
 	corev1 "k8s.io/api/core/v1"
@@ -48,8 +47,7 @@ func NewRunner(params RunnerParams) (Runner, error) {
 		cs:         params.ClientSet}, nil
 }
 
-func (r *runner) Run(ctx context.Context) error {
-
+func (r *runner) Run(cancelCtx context.Context) error {
 	err := loki.BringUpPod()
 	if err != nil {
 		return err
@@ -60,68 +58,64 @@ func (r *runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	namespaceList, err := r.cs.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	// get list of pods from all namespaces
+	podList, err := r.cs.CoreV1().Pods("").List(cancelCtx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
-	for _, ns := range namespaceList.Items {
-		podList, err := r.cs.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
+	for _, pod := range podList.Items {
+		go r.streamPodLogs(cancelCtx, r.cs, pod)
 
-		for _, pod := range podList.Items {
-
-			for _, container := range pod.Spec.Containers {
-				req := r.cs.CoreV1().Pods(ns.Name).GetLogs(pod.Name, &corev1.PodLogOptions{
-					Timestamps: true,
-					Container:  container.Name,
-				})
-
-				podLogs, err := req.Stream(ctx)
-				if err != nil {
-					return err
-				}
-				defer podLogs.Close()
-
-				buf := new(bytes.Buffer)
-
-				_, err = io.Copy(buf, podLogs)
-				if err != nil {
-					return err
-				}
-
-				labels := make(map[string]string)
-				labels["namespace"] = ns.Name
-				labels["pod_name"] = pod.Name
-				labels["container_name"] = container.Name
-
-				err = r.loadLogsToLoki(buf, parser.NewContainerParser(), labels)
-				if err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	return nil
 }
 
-func (r *runner) loadLogsToLoki(rawLogs *bytes.Buffer, logParser parser.Parser, labels map[string]string) error {
-
-	scanner := bufio.NewScanner(rawLogs)
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		log_line := scanner.Text()
-		tm, labels, err := logParser.Parse(log_line, labels)
-		if err != nil {
-			r.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
-			continue
-		}
-		r.lokiClient.PostLog(log_line, tm, labels)
+func (r *runner) loadLogsToLoki(logLine string, logParser parser.Parser, labels map[string]string) error {
+	tm, labelset, err := logParser.Parse(logLine, labels)
+	if err != nil {
+		fmt.Printf("%s\n", err.Error())
+		r.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
+		return err
 	}
+	r.lokiClient.PostLog(logLine, tm, labelset)
 
+	return nil
+}
+
+// streamPodLogs will stream the pod logs and load the logs to loki with relevant
+// labels, loglines and timestamp
+func (r *runner) streamPodLogs(cancelCtx context.Context, cs kubernetes.Interface, pod corev1.Pod) error {
+	for _, container := range pod.Spec.Containers {
+		podLogOptions := &corev1.PodLogOptions{
+			Follow:     true,
+			Timestamps: true,
+		}
+
+		req := cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
+		stream, err := req.Stream(cancelCtx)
+		if err != nil {
+			return fmt.Errorf("error in streaming logs: %s", err.Error())
+		}
+
+		reader := bufio.NewScanner(stream)
+		reader.Split(bufio.ScanLines)
+		defer stream.Close()
+
+		for reader.Scan() {
+			labels := make(map[string]string)
+			labels["namespace"] = pod.Namespace
+			labels["pod_name"] = pod.Name
+			labels["container_name"] = container.Name
+
+			logLine := reader.Text()
+
+			err = r.loadLogsToLoki(logLine, parser.NewContainerParser(), labels)
+			if err != nil {
+				return fmt.Errorf("error loading logs to loki: %s", err.Error())
+			}
+		}
+	}
 	return nil
 }

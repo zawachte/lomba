@@ -1,6 +1,6 @@
 module github.com/zawachte/lomba
 
-go 1.19
+go 1.18
 
 require (
 	github.com/go-kit/log v0.2.0
@@ -10,6 +10,8 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/common v0.32.1
 	github.com/spf13/cobra v1.0.0
+	k8s.io/api v0.23.6
+	k8s.io/apimachinery v0.23.6
 	k8s.io/client-go v0.23.6
 )
 
@@ -125,8 +127,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.23.6 // indirect
-	k8s.io/apimachinery v0.23.6 // indirect
 	k8s.io/klog/v2 v2.40.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	k8s.io/utils v0.0.0-20211116205334-6203023598ed // indirect
