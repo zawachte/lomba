@@ -3,7 +3,6 @@ package runner
 import (
 	"bufio"
 	"context"
-	"fmt"
 
 	"github.com/go-kit/log"
 	corev1 "k8s.io/api/core/v1"
@@ -75,7 +74,6 @@ func (r *runner) Run(cancelCtx context.Context) error {
 func (r *runner) loadLogsToLoki(logLine string, logParser parser.Parser, labels map[string]string) error {
 	tm, labelset, err := logParser.Parse(logLine, labels)
 	if err != nil {
-		fmt.Printf("%s\n", err.Error())
 		r.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
 		return err
 	}
@@ -96,7 +94,7 @@ func (r *runner) streamPodLogs(cancelCtx context.Context, cs kubernetes.Interfac
 		req := cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
 		stream, err := req.Stream(cancelCtx)
 		if err != nil {
-			return fmt.Errorf("error in streaming logs: %s", err.Error())
+			return err
 		}
 
 		reader := bufio.NewScanner(stream)
@@ -111,10 +109,8 @@ func (r *runner) streamPodLogs(cancelCtx context.Context, cs kubernetes.Interfac
 
 			logLine := reader.Text()
 
-			err = r.loadLogsToLoki(logLine, parser.NewContainerParser(), labels)
-			if err != nil {
-				return fmt.Errorf("error loading logs to loki: %s", err.Error())
-			}
+			// ignore the error and continue reading stream & loading to loki
+			_ = r.loadLogsToLoki(logLine, parser.NewContainerParser(), labels)
 		}
 	}
 	return nil
