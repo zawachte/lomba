@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
@@ -16,24 +17,28 @@ import (
 )
 
 type runOptions struct {
-	kubeconfig string
+	kubeconfig     string
+	streamDuration time.Duration
 }
 
 var runOpts = &runOptions{}
 
 var runCmd = &cobra.Command{
-	Use:     "run",
-	Short:   "run ",
-	Long:    "run ",
-	Example: "	lomba run",
-	//Args: cobra.MaximumNArgs(1),
+	Use:   "run",
+	Short: "run ",
+	Long:  "run ",
+	Example: "	lomba run\n" +
+		"	lomba run --kubeconfig <path to kubeconfig> --stream-duration 10m\n" +
+		"	lomba run -k <path to kubeconfig> -s 15m30s",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRun()
 	},
 }
 
 func init() {
-	runCmd.Flags().StringVarP(&runOpts.kubeconfig, "kubeconfig", "k", "", "kubeconfig")
+	runCmd.Flags().StringVarP(&runOpts.kubeconfig, "kubeconfig", "k", os.Getenv("HOME")+"/.kube/config", "kubeconfig")
+	runCmd.Flags().DurationVarP(&runOpts.streamDuration, "stream-duration", "s", 1*time.Hour, "time duration to "+
+		"stream logs into loki")
 	RootCmd.AddCommand(runCmd)
 }
 
@@ -53,15 +58,21 @@ func runRun() error {
 		return err
 	}
 
-	err = rr.Run(context.Background())
+	cancelCtx, cancelFunc := context.WithTimeout(context.Background(), runOpts.streamDuration)
+	err = rr.Run(cancelCtx)
 	if err != nil {
+		cancelFunc()
 		return err
 	}
 
 	grafanaEndpoint := grafana.GetOutboundIPOrLocalhost()
 
-	fmt.Printf("Kubernetes logs are injested to Loki. Ready to query at http://%s:3000\n", grafanaEndpoint)
+	fmt.Printf("Kubernetes logs will be streamed to Loki for next %s minutes. Ready to query at http://%s:3000\n",
+		runOpts.streamDuration, grafanaEndpoint)
 
+	// sleep for duration as much as set in stream-duration flag to keep the goroutines active
+	time.Sleep(runOpts.streamDuration)
+	cancelFunc()
 	return nil
 }
 
