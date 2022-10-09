@@ -64,8 +64,9 @@ func (r *runner) Run(cancelCtx context.Context) error {
 	}
 
 	for _, pod := range podList.Items {
-		go r.streamPodLogs(cancelCtx, r.cs, pod)
-
+		for _, container := range pod.Spec.Containers {
+			go r.streamPodLogs(cancelCtx, r.cs, pod, container.Name)
+		}
 	}
 
 	return nil
@@ -84,34 +85,32 @@ func (r *runner) loadLogsToLoki(logLine string, logParser parser.Parser, labels 
 
 // streamPodLogs will stream the pod logs and load the logs to loki with relevant
 // labels, loglines and timestamp
-func (r *runner) streamPodLogs(cancelCtx context.Context, cs kubernetes.Interface, pod corev1.Pod) error {
-	for _, container := range pod.Spec.Containers {
-		podLogOptions := &corev1.PodLogOptions{
-			Follow:     true,
-			Timestamps: true,
-		}
+func (r *runner) streamPodLogs(cancelCtx context.Context, cs kubernetes.Interface, pod corev1.Pod, containerName string) error {
+	podLogOptions := &corev1.PodLogOptions{
+		Follow:     true,
+		Timestamps: true,
+	}
 
-		req := cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
-		stream, err := req.Stream(cancelCtx)
-		if err != nil {
-			return err
-		}
+	req := cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
+	stream, err := req.Stream(cancelCtx)
+	if err != nil {
+		return err
+	}
 
-		reader := bufio.NewScanner(stream)
-		reader.Split(bufio.ScanLines)
-		defer stream.Close()
+	reader := bufio.NewScanner(stream)
+	reader.Split(bufio.ScanLines)
+	defer stream.Close()
 
-		for reader.Scan() {
-			labels := make(map[string]string)
-			labels["namespace"] = pod.Namespace
-			labels["pod_name"] = pod.Name
-			labels["container_name"] = container.Name
+	for reader.Scan() {
+		labels := make(map[string]string)
+		labels["namespace"] = pod.Namespace
+		labels["pod_name"] = pod.Name
+		labels["container_name"] = containerName
 
-			logLine := reader.Text()
+		logLine := reader.Text()
 
-			// ignore the error and continue reading stream & loading to loki
-			_ = r.loadLogsToLoki(logLine, parser.NewContainerParser(), labels)
-		}
+		// ignore the error and continue reading stream & loading to loki
+		_ = r.loadLogsToLoki(logLine, parser.NewContainerParser(), labels)
 	}
 	return nil
 }
